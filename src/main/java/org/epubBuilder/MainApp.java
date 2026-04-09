@@ -4,6 +4,7 @@ import javafx.application.Application;
 import javafx.animation.Animation;
 import javafx.animation.KeyFrame;
 import javafx.animation.Timeline;
+import javafx.scene.image.Image;
 import javafx.scene.Scene;
 import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
@@ -27,6 +28,7 @@ import org.epubBuilder.ui.PreliminariesPane;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 
 public class MainApp extends Application {
 
@@ -58,6 +60,7 @@ public class MainApp extends Application {
         scene.setFill(javafx.scene.paint.Color.web("#f4f6f8"));
 
         primaryStage.setScene(scene);
+        applyIcon(primaryStage);
         primaryStage.setMinWidth(820);
         primaryStage.setMinHeight(560);
         updateTitle(primaryStage);
@@ -273,6 +276,15 @@ public class MainApp extends Application {
         alert.setHeaderText(title);
         alert.setContentText(message);
         alert.showAndWait();
+    }
+
+    private void applyIcon(Stage stage) {
+        try (InputStream input = getClass().getResourceAsStream("/icon.png")) {
+            if (input != null) {
+                stage.getIcons().add(new Image(input));
+            }
+        } catch (IOException ignored) {
+        }
     }
 
     public static void main(String[] args) {
