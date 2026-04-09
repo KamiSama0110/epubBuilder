@@ -344,6 +344,33 @@ public class PreliminariesPane extends HBox {
         book.getPreliminaryPages().addAll(pages);
     }
 
+    public void reloadFromBook() {
+        PreliminaryPage selected = listView.getSelectionModel().getSelectedItem();
+        String selectedId = selected == null ? "" : selected.getId();
+
+        pages.setAll(book.getPreliminaryPages());
+        listView.refresh();
+
+        if (pages.isEmpty()) {
+            listView.getSelectionModel().clearSelection();
+            clearEditor();
+            return;
+        }
+
+        PreliminaryPage toSelect = pages.get(0);
+        if (!selectedId.isBlank()) {
+            for (PreliminaryPage page : pages) {
+                if (page.getId().equals(selectedId)) {
+                    toSelect = page;
+                    break;
+                }
+            }
+        }
+
+        listView.getSelectionModel().select(toSelect);
+        loadPage(toSelect);
+    }
+
     private class PageCell extends ListCell<PreliminaryPage> {
 
         PageCell() {

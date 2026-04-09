@@ -292,6 +292,33 @@ public class ChaptersPane extends HBox {
         book.getChapters().addAll(chapters);
     }
 
+    public void reloadFromBook() {
+        Chapter selected = listView.getSelectionModel().getSelectedItem();
+        String selectedId = selected == null ? "" : selected.getId();
+
+        chapters.setAll(book.getChapters());
+        listView.refresh();
+
+        if (chapters.isEmpty()) {
+            listView.getSelectionModel().clearSelection();
+            clearEditor();
+            return;
+        }
+
+        Chapter toSelect = chapters.get(0);
+        if (!selectedId.isBlank()) {
+            for (Chapter chapter : chapters) {
+                if (chapter.getId().equals(selectedId)) {
+                    toSelect = chapter;
+                    break;
+                }
+            }
+        }
+
+        listView.getSelectionModel().select(toSelect);
+        loadChapter(toSelect);
+    }
+
     private void insertImageAtCursor() {
         if (currentChapter == null) return;
 
