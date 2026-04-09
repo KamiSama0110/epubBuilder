@@ -10,11 +10,14 @@ import javafx.geometry.Pos;
 import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
 import javafx.scene.control.ButtonType;
+import javafx.scene.control.IndexRange;
 import javafx.scene.control.Label;
 import javafx.scene.control.ListCell;
 import javafx.scene.control.ListView;
 import javafx.scene.control.TextArea;
 import javafx.scene.control.TextField;
+import javafx.scene.control.TextInputDialog;
+import javafx.scene.control.Tooltip;
 import javafx.scene.input.ClipboardContent;
 import javafx.scene.input.Dragboard;
 import javafx.scene.input.TransferMode;
@@ -25,8 +28,14 @@ import javafx.stage.FileChooser;
 import javafx.stage.Stage;
 
 import java.io.File;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class ChaptersPane extends HBox {
+
+    private static final Pattern GLOSS_PATTERN = Pattern.compile("\\[\\[GLOSS:([^|\\]]+)\\|([^|\\]]*)\\|([^\\]]+)]]");
 
     private final Book book;
     private final Stage stage;
@@ -37,6 +46,9 @@ public class ChaptersPane extends HBox {
     private final TextField titleField = new TextField();
     private final TextArea bodyArea = new TextArea();
     private final Button btnInsertImg = new Button("Insertar imagen en cursor");
+    private final Button btnInsertGlossary = new Button("Referencia glosario");
+    private final ObservableList<GlossaryToken> glossaryTokens = FXCollections.observableArrayList();
+    private final ListView<GlossaryToken> glossaryList = new ListView<>(glossaryTokens);
     private final VBox editorPane = new VBox();
 
     private Chapter currentChapter;
@@ -69,6 +81,7 @@ public class ChaptersPane extends HBox {
         bodyArea.textProperty().addListener((o, old, val) -> {
             if (loading || currentChapter == null) return;
             currentChapter.setBody(val);
+            refreshGlossaryList();
         });
 
         clearEditor();
@@ -88,14 +101,16 @@ public class ChaptersPane extends HBox {
         hint.setWrapText(true);
         hint.getStyleClass().add("hint-label");
 
-        Button btnAdd = new Button("+ Nuevo");
-        btnAdd.getStyleClass().add("action-button");
-        btnAdd.setPrefWidth(96);
+        Button btnAdd = new Button("+");
+        btnAdd.getStyleClass().add("toolbar-button");
+        btnAdd.setTooltip(new Tooltip("Crear capitulo"));
+        btnAdd.setPrefSize(36, 36);
         btnAdd.setOnAction(e -> addChapter());
 
-        Button btnDelete = new Button("Eliminar");
-        btnDelete.getStyleClass().add("danger-button");
-        btnDelete.setPrefWidth(96);
+        Button btnDelete = new Button("x");
+        btnDelete.getStyleClass().add("toolbar-danger-button");
+        btnDelete.setTooltip(new Tooltip("Eliminar capitulo seleccionado"));
+        btnDelete.setPrefSize(36, 36);
         btnDelete.setOnAction(e -> deleteChapter());
 
         HBox actions = new HBox(8, btnAdd, btnDelete);
@@ -130,10 +145,60 @@ public class ChaptersPane extends HBox {
 
         btnInsertImg.getStyleClass().add("action-button");
         btnInsertImg.setOnAction(e -> insertImageAtCursor());
+        btnInsertGlossary.getStyleClass().add("action-button");
+        btnInsertGlossary.setOnAction(e -> insertGlossaryReference());
 
-        VBox card = new VBox(10, editorTitle, titleLabel, titleField, bodyLabel, bodyArea, btnInsertImg);
+        HBox actionRow = new HBox(10, btnInsertImg, btnInsertGlossary);
+        actionRow.setAlignment(Pos.CENTER_LEFT);
+
+        Label glossaryLabel = new Label("REFERENCIAS DE GLOSARIO");
+        glossaryLabel.getStyleClass().add("field-label");
+
+        glossaryList.getStyleClass().addAll("list-view", "entity-list", "glossary-list");
+        glossaryList.setPlaceholder(new Label("Sin referencias"));
+        glossaryList.setCellFactory(lv -> new ListCell<>() {
+            @Override
+            protected void updateItem(GlossaryToken item, boolean empty) {
+                super.updateItem(item, empty);
+                if (empty || item == null) {
+                    setText(null);
+                    return;
+                }
+                setText(item.label + " -> " + item.term);
+            }
+        });
+        glossaryList.getSelectionModel().selectedItemProperty().addListener((o, old, val) -> {
+            if (val == null) return;
+            bodyArea.requestFocus();
+            bodyArea.selectRange(val.start, val.end);
+        });
+
+        Button btnEditRef = new Button("Editar");
+        btnEditRef.getStyleClass().add("action-button");
+        btnEditRef.setOnAction(e -> editSelectedGlossaryReference());
+
+        Button btnRemoveRef = new Button("Quitar");
+        btnRemoveRef.getStyleClass().add("danger-button");
+        btnRemoveRef.setOnAction(e -> removeSelectedGlossaryReference());
+
+        HBox glossaryActions = new HBox(10, btnEditRef, btnRemoveRef);
+        glossaryActions.setAlignment(Pos.CENTER_LEFT);
+
+        VBox card = new VBox(10,
+                editorTitle,
+                titleLabel,
+                titleField,
+                bodyLabel,
+                bodyArea,
+                actionRow,
+                glossaryLabel,
+                glossaryList,
+                glossaryActions
+        );
         card.getStyleClass().add("card");
         VBox.setVgrow(card, Priority.ALWAYS);
+        VBox.setVgrow(glossaryList, Priority.NEVER);
+        glossaryList.setPrefHeight(120);
 
         editorPane.getChildren().add(card);
         return editorPane;
@@ -192,10 +257,12 @@ public class ChaptersPane extends HBox {
         titleField.setDisable(false);
         bodyArea.setDisable(false);
         btnInsertImg.setDisable(false);
+        btnInsertGlossary.setDisable(false);
 
         titleField.setText(chapter.getTitle());
         bodyArea.setText(chapter.getBody());
         updateEditorTitle(chapter.getTitle());
+        refreshGlossaryList();
 
         currentChapter = chapter;
         loading = false;
@@ -209,6 +276,8 @@ public class ChaptersPane extends HBox {
         bodyArea.clear();
         bodyArea.setDisable(true);
         btnInsertImg.setDisable(true);
+        btnInsertGlossary.setDisable(true);
+        glossaryTokens.clear();
     }
 
     private void updateEditorTitle(String value) {
@@ -239,6 +308,128 @@ public class ChaptersPane extends HBox {
         int caret = bodyArea.getCaretPosition();
         bodyArea.insertText(caret, mark);
         bodyArea.positionCaret(caret + mark.length());
+    }
+
+    private void insertGlossaryReference() {
+        if (currentChapter == null) return;
+
+        String selectedText = bodyArea.getSelectedText() == null ? "" : bodyArea.getSelectedText().trim();
+        String initialTerm = selectedText.isBlank() ? "" : selectedText;
+
+        TextInputDialog termDialog = new TextInputDialog(initialTerm);
+        termDialog.setTitle("Nueva referencia");
+        termDialog.setHeaderText("Palabra o termino a enlazar");
+        termDialog.setContentText("Termino:");
+        String term = termDialog.showAndWait().orElse("").trim();
+        if (term.isBlank()) return;
+
+        TextInputDialog defDialog = new TextInputDialog("");
+        defDialog.setTitle("Nueva referencia");
+        defDialog.setHeaderText("Definicion para el glosario");
+        defDialog.setContentText("Definicion:");
+        String definition = defDialog.showAndWait().orElse("").trim();
+        if (definition.isBlank()) return;
+
+        String visibleText = selectedText.isBlank() ? term : selectedText;
+        String token = "[[GLOSS:"
+                + sanitizeGlossaryPart(term)
+                + "|"
+                + sanitizeGlossaryPart(definition)
+                + "|"
+                + sanitizeGlossaryPart(visibleText)
+                + "]]";
+
+        IndexRange selection = bodyArea.getSelection();
+        if (selection.getLength() > 0) {
+            bodyArea.replaceText(selection, token);
+        } else {
+            int caret = bodyArea.getCaretPosition();
+            bodyArea.insertText(caret, token);
+            bodyArea.positionCaret(caret + token.length());
+        }
+        refreshGlossaryList();
+    }
+
+    private String sanitizeGlossaryPart(String input) {
+        return input.replace("|", "/").replace("]]", "] ]").trim();
+    }
+
+    private void editSelectedGlossaryReference() {
+        GlossaryToken selected = glossaryList.getSelectionModel().getSelectedItem();
+        if (selected == null) return;
+
+        TextInputDialog termDialog = new TextInputDialog(selected.term);
+        termDialog.setTitle("Editar referencia");
+        termDialog.setHeaderText("Termino del glosario");
+        termDialog.setContentText("Termino:");
+        String term = termDialog.showAndWait().orElse("").trim();
+        if (term.isBlank()) return;
+
+        TextInputDialog defDialog = new TextInputDialog(selected.definition);
+        defDialog.setTitle("Editar referencia");
+        defDialog.setHeaderText("Definicion");
+        defDialog.setContentText("Definicion:");
+        String definition = defDialog.showAndWait().orElse("").trim();
+        if (definition.isBlank()) return;
+
+        TextInputDialog labelDialog = new TextInputDialog(selected.label);
+        labelDialog.setTitle("Editar referencia");
+        labelDialog.setHeaderText("Texto visible en el capitulo");
+        labelDialog.setContentText("Texto visible:");
+        String label = labelDialog.showAndWait().orElse("").trim();
+        if (label.isBlank()) return;
+
+        String replacement = "[[GLOSS:"
+                + sanitizeGlossaryPart(term)
+                + "|"
+                + sanitizeGlossaryPart(definition)
+                + "|"
+                + sanitizeGlossaryPart(label)
+                + "]]";
+        bodyArea.replaceText(selected.start, selected.end, replacement);
+        refreshGlossaryList();
+    }
+
+    private void removeSelectedGlossaryReference() {
+        GlossaryToken selected = glossaryList.getSelectionModel().getSelectedItem();
+        if (selected == null) return;
+        bodyArea.replaceText(selected.start, selected.end, selected.label);
+        refreshGlossaryList();
+    }
+
+    private void refreshGlossaryList() {
+        String text = bodyArea.getText();
+        glossaryTokens.setAll(parseGlossaryTokens(text));
+    }
+
+    private List<GlossaryToken> parseGlossaryTokens(String text) {
+        List<GlossaryToken> tokens = new ArrayList<>();
+        if (text == null || text.isBlank()) return tokens;
+
+        Matcher matcher = GLOSS_PATTERN.matcher(text);
+        while (matcher.find()) {
+            String term = matcher.group(1).trim();
+            String definition = matcher.group(2).trim();
+            String label = matcher.group(3).trim();
+            tokens.add(new GlossaryToken(matcher.start(), matcher.end(), term, definition, label));
+        }
+        return tokens;
+    }
+
+    private static class GlossaryToken {
+        private final int start;
+        private final int end;
+        private final String term;
+        private final String definition;
+        private final String label;
+
+        private GlossaryToken(int start, int end, String term, String definition, String label) {
+            this.start = start;
+            this.end = end;
+            this.term = term;
+            this.definition = definition;
+            this.label = label;
+        }
     }
 
     private class ChapterCell extends ListCell<Chapter> {

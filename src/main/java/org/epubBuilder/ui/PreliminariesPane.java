@@ -17,6 +17,7 @@ import javafx.scene.control.ListCell;
 import javafx.scene.control.ListView;
 import javafx.scene.control.TextArea;
 import javafx.scene.control.TextField;
+import javafx.scene.control.Tooltip;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 import javafx.scene.input.ClipboardContent;
@@ -108,14 +109,16 @@ public class PreliminariesPane extends HBox {
         hint.setWrapText(true);
         hint.getStyleClass().add("hint-label");
 
-        Button btnAdd = new Button("+ Nuevo");
-        btnAdd.getStyleClass().add("action-button");
-        btnAdd.setPrefWidth(96);
+        Button btnAdd = new Button("+");
+        btnAdd.getStyleClass().add("toolbar-button");
+        btnAdd.setTooltip(new Tooltip("Crear pagina preliminar"));
+        btnAdd.setPrefSize(36, 36);
         btnAdd.setOnAction(e -> addPage());
 
-        Button btnDelete = new Button("Eliminar");
-        btnDelete.getStyleClass().add("danger-button");
-        btnDelete.setPrefWidth(96);
+        Button btnDelete = new Button("x");
+        btnDelete.getStyleClass().add("toolbar-danger-button");
+        btnDelete.setTooltip(new Tooltip("Eliminar pagina preliminar"));
+        btnDelete.setPrefSize(36, 36);
         btnDelete.setOnAction(e -> deletePage());
 
         HBox actions = new HBox(8, btnAdd, btnDelete);
