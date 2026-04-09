@@ -6,9 +6,21 @@ import javafx.application.Platform;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.geometry.Insets;
-import javafx.scene.control.*;
-import javafx.scene.input.*;
-import javafx.scene.layout.*;
+import javafx.geometry.Pos;
+import javafx.scene.control.Alert;
+import javafx.scene.control.Button;
+import javafx.scene.control.ButtonType;
+import javafx.scene.control.Label;
+import javafx.scene.control.ListCell;
+import javafx.scene.control.ListView;
+import javafx.scene.control.TextArea;
+import javafx.scene.control.TextField;
+import javafx.scene.input.ClipboardContent;
+import javafx.scene.input.Dragboard;
+import javafx.scene.input.TransferMode;
+import javafx.scene.layout.HBox;
+import javafx.scene.layout.Priority;
+import javafx.scene.layout.VBox;
 import javafx.stage.FileChooser;
 import javafx.stage.Stage;
 
@@ -16,141 +28,41 @@ import java.io.File;
 
 public class ChaptersPane extends HBox {
 
-    private final Book  book;
+    private final Book book;
     private final Stage stage;
     private final ObservableList<Chapter> chapters = FXCollections.observableArrayList();
     private final ListView<Chapter> listView = new ListView<>(chapters);
 
-    private final Label     editorTitle  = new Label("Ningún capítulo seleccionado");
-    private final TextField titleField   = new TextField();
-    private final TextArea  bodyArea     = new TextArea();
-    private final Button    btnInsertImg = new Button("⬜ Insertar imagen aquí");
-    private final VBox      editorPane   = new VBox(24);
+    private final Label editorTitle = new Label();
+    private final TextField titleField = new TextField();
+    private final TextArea bodyArea = new TextArea();
+    private final Button btnInsertImg = new Button("Insertar imagen en cursor");
+    private final VBox editorPane = new VBox();
 
-    private Chapter currentChapter = null;
-    private boolean loading        = false;
+    private Chapter currentChapter;
+    private boolean loading;
 
     public ChaptersPane(Book book, Stage stage) {
-        this.book  = book;
+        this.book = book;
         this.stage = stage;
+        this.chapters.setAll(book.getChapters());
         buildUI();
     }
 
     private void buildUI() {
-        setStyle("-fx-background-color: #0f0f13;");
-        getChildren().addAll(buildSidebar(), buildEditor());
-        HBox.setHgrow(editorPane, Priority.ALWAYS);
-    }
+        getStyleClass().add("pane-bg");
 
-    // ── Sidebar ────────────────────────────────────────────────────
-    private VBox buildSidebar() {
-        VBox sidebar = new VBox(16);
-        sidebar.setPrefWidth(220);
-        sidebar.setMinWidth(180);
-        sidebar.setPadding(new Insets(32, 16, 24, 16));
-        sidebar.setStyle("""
-                -fx-background-color: #0c0c10;
-                -fx-border-color: #1e1e28;
-                -fx-border-width: 0 1 0 0;
-                """);
+        VBox sidebar = buildSidebar();
+        VBox editor = buildEditor();
+        getChildren().addAll(sidebar, editor);
+        HBox.setHgrow(editor, Priority.ALWAYS);
 
-        Label label = new Label("CAPÍTULOS");
-        label.setStyle("""
-                -fx-font-size: 10px;
-                -fx-font-weight: bold;
-                -fx-text-fill: #555566;
-                -fx-letter-spacing: 1.5px;
-                """);
+        listView.getSelectionModel().selectedItemProperty().addListener((o, old, val) -> loadChapter(val));
 
-        listView.setStyle("""
-                -fx-background-color: transparent;
-                -fx-border-color: transparent;
-                """);
-        listView.setFixedCellSize(40);
-        VBox.setVgrow(listView, Priority.ALWAYS);
-        listView.setCellFactory(lv -> new ChapterCell());
-        listView.getSelectionModel().selectedItemProperty().addListener(
-                (o, old, sel) -> { if (!loading) loadChapter(sel); }
-        );
-
-        Button btnAdd = styledButton("+ Nuevo capítulo", "#5e5ce6", "#f0f0f5");
-        btnAdd.setMaxWidth(Double.MAX_VALUE);
-        btnAdd.setOnAction(e -> addChapter());
-
-        Button btnDel = styledButton("Eliminar", "#1e1e28", "#e05c5c");
-        btnDel.setMaxWidth(Double.MAX_VALUE);
-        btnDel.setOnAction(e -> deleteChapter());
-
-        sidebar.getChildren().addAll(label, listView, btnAdd, btnDel);
-        return sidebar;
-    }
-
-    // ── Editor ─────────────────────────────────────────────────────
-    private VBox buildEditor() {
-        editorPane.setPadding(new Insets(40, 52, 40, 52));
-        editorPane.setStyle("-fx-background-color: #0f0f13;");
-
-        editorTitle.setStyle("""
-                -fx-font-size: 22px;
-                -fx-font-weight: bold;
-                -fx-text-fill: #555566;
-                """);
-
-        // Campo título
-        Label titleLbl = fieldLabel("TÍTULO DEL CAPÍTULO");
-        titleField.setStyle(fieldStyle());
-        titleField.setPromptText("Ej: El comienzo");
-        titleField.setDisable(true);
-
-        // Cuerpo
-        Label bodyLbl = fieldLabel("CONTENIDO");
-
-        // Hint de uso
-        Label hint = new Label(
-                "Tip: coloca el cursor donde quieras insertar una imagen y pulsa el botón."
-        );
-        hint.setStyle("-fx-text-fill: #333344; -fx-font-size: 11px;");
-        hint.setWrapText(true);
-
-        bodyArea.setStyle(fieldStyle() + "-fx-control-inner-background: #18181f;");
-        bodyArea.setPromptText("Escribe el contenido del capítulo aquí...");
-        bodyArea.setWrapText(true);
-        bodyArea.setDisable(true);
-        VBox.setVgrow(bodyArea, Priority.ALWAYS);
-
-        // Botón insertar imagen
-        Label imgLbl = fieldLabel("IMÁGENES INLINE");
-        btnInsertImg.setStyle("""
-                -fx-background-color: transparent;
-                -fx-text-fill: #5e5ce6;
-                -fx-border-color: #5e5ce6;
-                -fx-border-width: 1;
-                -fx-border-radius: 4;
-                -fx-background-radius: 4;
-                -fx-padding: 6 16 6 16;
-                -fx-font-size: 12px;
-                -fx-cursor: hand;
-                """);
-        btnInsertImg.setDisable(true);
-        btnInsertImg.setOnAction(e -> insertImageAtCursor());
-
-        editorPane.getChildren().addAll(
-                editorTitle, new Separator(),
-                titleLbl, titleField,
-                bodyLbl, bodyArea,
-                imgLbl, hint, btnInsertImg
-        );
-
-        // Listeners con bandera loading
         titleField.textProperty().addListener((o, old, val) -> {
             if (loading || currentChapter == null) return;
             currentChapter.setTitle(val);
-            editorTitle.setText(val.isBlank() ? "(sin título)" : val);
-            editorTitle.setStyle("""
-                    -fx-font-size: 22px;
-                    -fx-font-weight: bold;
-                    -fx-text-fill: #f0f0f5;
-                    """);
+            updateEditorTitle(val);
             listView.refresh();
         });
 
@@ -159,133 +71,178 @@ public class ChaptersPane extends HBox {
             currentChapter.setBody(val);
         });
 
+        clearEditor();
+    }
+
+    private VBox buildSidebar() {
+        VBox sidebar = new VBox(12);
+        sidebar.setPrefWidth(260);
+        sidebar.setMinWidth(220);
+        sidebar.setPadding(new Insets(24, 14, 24, 14));
+        sidebar.getStyleClass().add("sidebar-bg");
+
+        Label label = new Label("CAPITULOS");
+        label.getStyleClass().add("field-label");
+
+        Label hint = new Label("Crea, reordena y edita tus capitulos.");
+        hint.setWrapText(true);
+        hint.getStyleClass().add("hint-label");
+
+        Button btnAdd = new Button("+ Nuevo");
+        btnAdd.getStyleClass().add("action-button");
+        btnAdd.setPrefWidth(96);
+        btnAdd.setOnAction(e -> addChapter());
+
+        Button btnDelete = new Button("Eliminar");
+        btnDelete.getStyleClass().add("danger-button");
+        btnDelete.setPrefWidth(96);
+        btnDelete.setOnAction(e -> deleteChapter());
+
+        HBox actions = new HBox(8, btnAdd, btnDelete);
+        actions.setAlignment(Pos.CENTER);
+
+        listView.getStyleClass().addAll("list-view", "entity-list");
+        listView.setCellFactory(lv -> new ChapterCell());
+        VBox.setVgrow(listView, Priority.ALWAYS);
+
+        sidebar.getChildren().addAll(label, hint, actions, listView);
+        return sidebar;
+    }
+
+    private VBox buildEditor() {
+        editorPane.setPadding(new Insets(28, 32, 28, 32));
+        editorPane.getStyleClass().add("pane-bg");
+
+        editorTitle.getStyleClass().add("empty-state-label");
+
+        Label titleLabel = new Label("TITULO");
+        titleLabel.getStyleClass().add("field-label");
+
+        titleField.getStyleClass().add("custom-text-field");
+
+        Label bodyLabel = new Label("CONTENIDO");
+        bodyLabel.getStyleClass().add("field-label");
+
+        bodyArea.getStyleClass().add("custom-text-area");
+        bodyArea.setWrapText(true);
+        bodyArea.setPrefRowCount(16);
+        VBox.setVgrow(bodyArea, Priority.ALWAYS);
+
+        btnInsertImg.getStyleClass().add("action-button");
+        btnInsertImg.setOnAction(e -> insertImageAtCursor());
+
+        VBox card = new VBox(10, editorTitle, titleLabel, titleField, bodyLabel, bodyArea, btnInsertImg);
+        card.getStyleClass().add("card");
+        VBox.setVgrow(card, Priority.ALWAYS);
+
+        editorPane.getChildren().add(card);
         return editorPane;
     }
 
-    // ── Insertar imagen en posición del cursor ─────────────────────
-    private void insertImageAtCursor() {
-        if (currentChapter == null) return;
-        FileChooser fc = new FileChooser();
-        fc.setTitle("Seleccionar imagen");
-        fc.getExtensionFilters().add(
-                new FileChooser.ExtensionFilter("Imágenes", "*.png", "*.jpg", "*.jpeg", "*.gif")
-        );
-        File f = fc.showOpenDialog(stage);
-        if (f == null) return;
-
-        String mark   = "\n[IMAGEN:" + f.getAbsolutePath() + "]\n";
-        int    caret  = bodyArea.getCaretPosition();
-        String before = bodyArea.getText().substring(0, caret);
-        String after  = bodyArea.getText().substring(caret);
-        bodyArea.setText(before + mark + after);
-        bodyArea.positionCaret(caret + mark.length());
-    }
-
-    // ── Acciones de capítulos ──────────────────────────────────────
     private void addChapter() {
-        Chapter c = new Chapter("Capítulo " + (chapters.size() + 1));
-        chapters.add(c);
-        book.getChapters().add(c);
+        Chapter chapter = new Chapter("Capitulo " + (chapters.size() + 1));
+        chapters.add(chapter);
+        syncBookChapters();
         Platform.runLater(() -> {
-            listView.getSelectionModel().select(c);
-            listView.scrollTo(c);
+            listView.getSelectionModel().select(chapter);
+            listView.scrollTo(chapter);
         });
     }
 
     private void deleteChapter() {
-        Chapter sel = listView.getSelectionModel().getSelectedItem();
-        if (sel == null) return;
-        String name = sel.getTitle().isBlank() ? "(sin título)" : sel.getTitle();
+        Chapter selected = listView.getSelectionModel().getSelectedItem();
+        if (selected == null) return;
+        int removedIndex = listView.getSelectionModel().getSelectedIndex();
+
+        String name = selected.getTitle().isBlank() ? "(sin titulo)" : selected.getTitle();
         Alert alert = new Alert(Alert.AlertType.CONFIRMATION,
                 "¿Eliminar \"" + name + "\"?", ButtonType.YES, ButtonType.NO);
         alert.setHeaderText(null);
-        alert.showAndWait().ifPresent(b -> {
-            if (b == ButtonType.YES) {
-                chapters.remove(sel);
-                book.getChapters().remove(sel);
-                clearEditor();
+        alert.showAndWait().ifPresent(btn -> {
+            if (btn == ButtonType.YES) {
+                chapters.remove(selected);
+                syncBookChapters();
+
+                if (chapters.isEmpty()) {
+                    listView.getSelectionModel().clearSelection();
+                    clearEditor();
+                    return;
+                }
+
+                int nextIndex = Math.min(removedIndex, chapters.size() - 1);
+                Platform.runLater(() -> {
+                    listView.getSelectionModel().select(nextIndex);
+                    listView.scrollTo(nextIndex);
+                    loadChapter(chapters.get(nextIndex));
+                });
             }
         });
     }
 
-    private void loadChapter(Chapter c) {
+    private void loadChapter(Chapter chapter) {
         loading = true;
         currentChapter = null;
-        if (c == null) { clearEditor(); loading = false; return; }
+
+        if (chapter == null) {
+            clearEditor();
+            loading = false;
+            return;
+        }
 
         titleField.setDisable(false);
         bodyArea.setDisable(false);
         btnInsertImg.setDisable(false);
 
-        titleField.setText(c.getTitle());
-        bodyArea.setText(c.getBody());
-        editorTitle.setText(c.getTitle().isBlank() ? "(sin título)" : c.getTitle());
-        editorTitle.setStyle("""
-                -fx-font-size: 22px;
-                -fx-font-weight: bold;
-                -fx-text-fill: #f0f0f5;
-                """);
+        titleField.setText(chapter.getTitle());
+        bodyArea.setText(chapter.getBody());
+        updateEditorTitle(chapter.getTitle());
 
-        currentChapter = c;
+        currentChapter = chapter;
         loading = false;
     }
 
     private void clearEditor() {
         currentChapter = null;
-        editorTitle.setText("Ningún capítulo seleccionado");
-        editorTitle.setStyle("""
-                -fx-font-size: 22px;
-                -fx-font-weight: bold;
-                -fx-text-fill: #555566;
-                """);
-        titleField.setText("");
+        updateEditorTitle("");
+        titleField.clear();
         titleField.setDisable(true);
-        bodyArea.setText("");
+        bodyArea.clear();
         bodyArea.setDisable(true);
         btnInsertImg.setDisable(true);
     }
 
-    // ── Helpers de estilo ──────────────────────────────────────────
-    private Label fieldLabel(String text) {
-        Label l = new Label(text);
-        l.setStyle("""
-                -fx-font-size: 10px;
-                -fx-font-weight: bold;
-                -fx-text-fill: #555566;
-                -fx-letter-spacing: 1.5px;
-                """);
-        return l;
+    private void updateEditorTitle(String value) {
+        boolean empty = value == null || value.isBlank();
+        editorTitle.setText(empty ? "Ningun capitulo seleccionado" : value);
+        editorTitle.getStyleClass().removeAll("editor-title", "empty-state-label");
+        editorTitle.getStyleClass().add(empty ? "empty-state-label" : "editor-title");
     }
 
-    private String fieldStyle() {
-        return """
-                -fx-background-color: #18181f;
-                -fx-text-fill: #e8e8f0;
-                -fx-border-color: #2a2a38;
-                -fx-border-width: 0 0 1 0;
-                -fx-background-radius: 0;
-                -fx-border-radius: 0;
-                -fx-padding: 10 4 10 4;
-                -fx-font-size: 14px;
-                """;
+    private void syncBookChapters() {
+        book.getChapters().clear();
+        book.getChapters().addAll(chapters);
     }
 
-    private Button styledButton(String text, String bg, String fg) {
-        Button b = new Button(text);
-        b.setStyle(String.format("""
-                -fx-background-color: %s;
-                -fx-text-fill: %s;
-                -fx-font-size: 12px;
-                -fx-font-weight: bold;
-                -fx-background-radius: 4;
-                -fx-padding: 9 0 9 0;
-                -fx-cursor: hand;
-                """, bg, fg));
-        return b;
+    private void insertImageAtCursor() {
+        if (currentChapter == null) return;
+
+        FileChooser chooser = new FileChooser();
+        chooser.setTitle("Seleccionar imagen");
+        chooser.getExtensionFilters().add(
+                new FileChooser.ExtensionFilter("Imagenes", "*.png", "*.jpg", "*.jpeg", "*.gif")
+        );
+
+        File file = chooser.showOpenDialog(stage);
+        if (file == null) return;
+
+        String mark = "\n[IMAGEN:" + file.getAbsolutePath() + "]\n";
+        int caret = bodyArea.getCaretPosition();
+        bodyArea.insertText(caret, mark);
+        bodyArea.positionCaret(caret + mark.length());
     }
 
-    // ── Celda con drag & drop ──────────────────────────────────────
     private class ChapterCell extends ListCell<Chapter> {
+
         ChapterCell() {
             setOnDragDetected(e -> {
                 if (getItem() == null) return;
@@ -295,22 +252,24 @@ public class ChaptersPane extends HBox {
                 db.setContent(cc);
                 e.consume();
             });
+
             setOnDragOver(e -> {
-                if (e.getGestureSource() != this && e.getDragboard().hasString())
+                if (e.getGestureSource() != this && e.getDragboard().hasString()) {
                     e.acceptTransferModes(TransferMode.MOVE);
+                }
                 e.consume();
             });
+
             setOnDragDropped(e -> {
                 if (getItem() == null) return;
                 Dragboard db = e.getDragboard();
                 if (db.hasString()) {
                     int from = Integer.parseInt(db.getString());
-                    int to   = getIndex();
+                    int to = getIndex();
                     if (from != to) {
                         Chapter moved = chapters.remove(from);
                         chapters.add(to, moved);
-                        book.getChapters().clear();
-                        book.getChapters().addAll(chapters);
+                        syncBookChapters();
                         Platform.runLater(() -> listView.getSelectionModel().select(to));
                     }
                     e.setDropCompleted(true);
@@ -324,21 +283,11 @@ public class ChaptersPane extends HBox {
             super.updateItem(item, empty);
             if (empty || item == null) {
                 setText(null);
-                setStyle("-fx-background-color: transparent;");
+                setGraphic(null);
                 return;
             }
+
             setText(item.toString());
-            boolean selected = getListView().getSelectionModel().getSelectedItem() == item;
-            setStyle(String.format("""
-                    -fx-text-fill: %s;
-                    -fx-font-size: 13px;
-                    -fx-padding: 0 8 0 8;
-                    -fx-background-color: %s;
-                    -fx-background-radius: 4;
-                    """,
-                    selected ? "#f0f0f5" : "#707088",
-                    selected ? "#1e1e2e" : "transparent"
-            ));
         }
     }
 }

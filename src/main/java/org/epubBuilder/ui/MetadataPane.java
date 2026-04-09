@@ -13,7 +13,7 @@ import java.io.File;
 
 public class MetadataPane extends ScrollPane {
 
-    private final Book      book;
+    private final Book book;
     private final ImageView coverPreview = new ImageView();
 
     public MetadataPane(Book book, Stage stage) {
@@ -22,86 +22,85 @@ public class MetadataPane extends ScrollPane {
     }
 
     private void buildUI(Stage stage) {
-        VBox container = new VBox(40);
-        container.setPadding(new Insets(48, 56, 48, 56));
-        container.setStyle("-fx-background-color: #0f0f13;");
+        VBox container = new VBox(24);
+        container.setPadding(new Insets(34, 40, 34, 40));
+        container.getStyleClass().add("pane-bg");
 
-        // ── Encabezado ─────────────────────────────────────────────
-        Label heading = new Label("Información del libro");
-        heading.setStyle("""
-                -fx-font-size: 13px;
-                -fx-font-weight: bold;
-                -fx-text-fill: #5e5ce6;
-                -fx-letter-spacing: 2px;
-                """);
-
+        VBox head = new VBox(6);
         Label title = new Label("Metadatos");
-        title.setStyle("""
-                -fx-font-size: 28px;
-                -fx-font-weight: bold;
-                -fx-text-fill: #f0f0f5;
-                """);
+        title.getStyleClass().add("heading-label");
+        Label subtitle = new Label("Completa la informacion principal del libro antes de exportar.");
+        subtitle.getStyleClass().add("title-label");
+        head.getChildren().addAll(title, subtitle);
 
-        VBox header = new VBox(4, heading, title);
-
-        // ── Cuerpo: formulario + portada ───────────────────────────
-        HBox body = new HBox(64);
+        HBox body = new HBox(20);
         body.setAlignment(Pos.TOP_LEFT);
 
-        VBox form = new VBox(28);
-        form.setPrefWidth(480);
+        VBox left = new VBox(18);
+        HBox.setHgrow(left, Priority.ALWAYS);
 
-        form.getChildren().addAll(
-                field("Título",        book.titleProperty(),       false),
-                field("Autor",         book.authorProperty(),       false),
-                field("Ilustrador",    book.illustratorProperty(),  false),
-                field("Idioma",        book.languageProperty(),     false),
-                field("Sinopsis",      book.synopsisProperty(),     true)
-        );
+        VBox basicCard = new VBox(14);
+        basicCard.getStyleClass().add("card");
+        Label basicTitle = new Label("Informacion Basica");
+        basicTitle.getStyleClass().add("section-title");
+
+        GridPane grid = new GridPane();
+        grid.setHgap(14);
+        grid.setVgap(14);
+
+        VBox titleField = field("Titulo", book.titleProperty(), false);
+        GridPane.setColumnSpan(titleField, 2);
+        grid.add(titleField, 0, 0);
+        grid.add(field("Autor", book.authorProperty(), false), 0, 1);
+        grid.add(field("Ilustrador", book.illustratorProperty(), false), 1, 1);
+
+        VBox langField = field("Idioma", book.languageProperty(), false);
+        GridPane.setColumnSpan(langField, 2);
+        grid.add(langField, 0, 2);
+
+        ColumnConstraints c1 = new ColumnConstraints();
+        c1.setPercentWidth(50);
+        ColumnConstraints c2 = new ColumnConstraints();
+        c2.setPercentWidth(50);
+        grid.getColumnConstraints().addAll(c1, c2);
+
+        basicCard.getChildren().addAll(basicTitle, grid);
+
+        VBox synopsisCard = new VBox(14);
+        synopsisCard.getStyleClass().add("card");
+        Label synopsisTitle = new Label("Sinopsis");
+        synopsisTitle.getStyleClass().add("section-title");
+        synopsisCard.getChildren().addAll(synopsisTitle, field("Resumen", book.synopsisProperty(), true));
+
+        left.getChildren().addAll(basicCard, synopsisCard);
 
         VBox cover = buildCover(stage);
-        body.getChildren().addAll(form, cover);
+        body.getChildren().addAll(left, cover);
 
-        container.getChildren().addAll(header, body);
+        container.getChildren().addAll(head, body);
 
         setContent(container);
         setFitToWidth(true);
         setHbarPolicy(ScrollBarPolicy.NEVER);
-        setStyle("-fx-background-color: #0f0f13; -fx-background: #0f0f13;");
+        getStyleClass().add("pane-bg");
     }
 
     private VBox field(String label, javafx.beans.property.StringProperty prop, boolean multi) {
-        VBox box = new VBox(8);
+        VBox box = new VBox(6);
 
         Label lbl = new Label(label.toUpperCase());
-        lbl.setStyle("""
-                -fx-font-size: 10px;
-                -fx-font-weight: bold;
-                -fx-text-fill: #555566;
-                -fx-letter-spacing: 1.5px;
-                """);
-
-        String base = """
-                -fx-background-color: #18181f;
-                -fx-text-fill: #e8e8f0;
-                -fx-border-color: #2a2a38;
-                -fx-border-width: 0 0 1 0;
-                -fx-background-radius: 0;
-                -fx-border-radius: 0;
-                -fx-padding: 10 4 10 4;
-                -fx-font-size: 14px;
-                """;
+        lbl.getStyleClass().add("field-label");
 
         if (multi) {
             TextArea area = new TextArea();
-            area.setStyle(base + "-fx-control-inner-background: #18181f;");
-            area.setPrefRowCount(4);
+            area.getStyleClass().add("custom-text-area");
+            area.setPrefRowCount(5);
             area.setWrapText(true);
             area.textProperty().bindBidirectional(prop);
             box.getChildren().addAll(lbl, area);
         } else {
             TextField tf = new TextField();
-            tf.setStyle(base);
+            tf.getStyleClass().add("custom-text-field");
             tf.textProperty().bindBidirectional(prop);
             box.getChildren().addAll(lbl, tf);
         }
@@ -110,45 +109,35 @@ public class MetadataPane extends ScrollPane {
     }
 
     private VBox buildCover(Stage stage) {
-        VBox box = new VBox(16);
+        VBox box = new VBox(14);
+        box.setPrefWidth(290);
+        box.setMinWidth(260);
         box.setAlignment(Pos.TOP_CENTER);
+        box.getStyleClass().add("card");
 
-        Label lbl = new Label("PORTADA");
-        lbl.setStyle("""
-                -fx-font-size: 10px;
-                -fx-font-weight: bold;
-                -fx-text-fill: #555566;
-                -fx-letter-spacing: 1.5px;
-                """);
+        Label lbl = new Label("Portada");
+        lbl.getStyleClass().add("section-title");
 
-        coverPreview.setFitWidth(150);
-        coverPreview.setFitHeight(210);
+        Label hint = new Label("Formato recomendado: JPG o PNG vertical.");
+        hint.getStyleClass().add("hint-label");
+        hint.setWrapText(true);
+        hint.setTextAlignment(javafx.scene.text.TextAlignment.CENTER);
+
+        coverPreview.setFitWidth(190);
+        coverPreview.setFitHeight(260);
         coverPreview.setPreserveRatio(true);
 
         StackPane frame = new StackPane();
-        frame.setPrefSize(150, 210);
-        frame.setStyle("""
-                -fx-background-color: #18181f;
-                -fx-border-color: #2a2a38;
-                -fx-border-width: 1;
-                """);
+        frame.setPrefSize(210, 280);
+        frame.getStyleClass().add("image-frame");
 
         Label placeholder = new Label("Sin imagen");
-        placeholder.setStyle("-fx-text-fill: #333344; -fx-font-size: 12px;");
+        placeholder.getStyleClass().add("hint-label");
         frame.getChildren().addAll(placeholder, coverPreview);
 
-        Button btn = new Button("Seleccionar");
-        btn.setStyle("""
-                -fx-background-color: transparent;
-                -fx-text-fill: #5e5ce6;
-                -fx-border-color: #5e5ce6;
-                -fx-border-width: 1;
-                -fx-border-radius: 4;
-                -fx-background-radius: 4;
-                -fx-padding: 7 20 7 20;
-                -fx-font-size: 12px;
-                -fx-cursor: hand;
-                """);
+        Button btn = new Button("Seleccionar portada");
+        btn.getStyleClass().add("action-button");
+        btn.setMaxWidth(Double.MAX_VALUE);
 
         btn.setOnAction(e -> {
             FileChooser fc = new FileChooser();
@@ -164,7 +153,7 @@ public class MetadataPane extends ScrollPane {
             }
         });
 
-        box.getChildren().addAll(lbl, frame, btn);
+        box.getChildren().addAll(lbl, hint, frame, btn);
         return box;
     }
 }
