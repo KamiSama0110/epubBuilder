@@ -19,7 +19,10 @@ import java.util.regex.Pattern;
 
 public class ExportPane extends VBox {
 
-    private static final Pattern IMAGE_MARKER = Pattern.compile("\\[IMAGEN:([^\\]]+)]");
+    // Marcador de imagen del RichTextEditor (captura div completo incluyendo cierre)
+    private static final Pattern IMAGE_MARKER = Pattern.compile("<div[^>]*class=['\"]epub-image-marker['\"][^>]*data-path=['\"]([^'\"]+)['\"][^>]*>.*?</div>", Pattern.DOTALL);
+    // Tambien soportar formato antiguo [IMAGEN:path]
+    private static final Pattern OLD_IMAGE_MARKER = Pattern.compile("\\[IMAGEN:([^\\]]+)]");
     private static final Pattern GLOSS_MARKER = Pattern.compile("\\[\\[GLOSS:([^|\\]]+)\\|([^|\\]]*)\\|([^\\]]+)]]");
 
     private final Book book;
@@ -192,9 +195,20 @@ public class ExportPane extends VBox {
                 continue;
             }
 
+            // Buscar imágenes en formato RichTextEditor
             Matcher imageMatcher = IMAGE_MARKER.matcher(body);
             while (imageMatcher.find()) {
                 String imagePath = imageMatcher.group(1).trim();
+                if (imagePath.isBlank()) continue;
+                if (!new File(imagePath).exists()) {
+                    result.warnings.add("- Imagen faltante en " + chapterLabel + ": " + imagePath);
+                }
+            }
+            
+            // Tambien buscar formato antiguo [IMAGEN:path]
+            Matcher oldImageMatcher = OLD_IMAGE_MARKER.matcher(body);
+            while (oldImageMatcher.find()) {
+                String imagePath = oldImageMatcher.group(1).trim();
                 if (imagePath.isBlank()) continue;
                 if (!new File(imagePath).exists()) {
                     result.warnings.add("- Imagen faltante en " + chapterLabel + ": " + imagePath);

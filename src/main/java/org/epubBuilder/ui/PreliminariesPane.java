@@ -15,7 +15,6 @@ import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
 import javafx.scene.control.ListCell;
 import javafx.scene.control.ListView;
-import javafx.scene.control.TextArea;
 import javafx.scene.control.TextField;
 import javafx.scene.control.Tooltip;
 import javafx.scene.image.Image;
@@ -42,7 +41,7 @@ public class PreliminariesPane extends HBox {
     private final Label editorTitle = new Label();
     private final TextField titleField = new TextField();
     private final ComboBox<String> typeBox = new ComboBox<>();
-    private final TextArea textArea = new TextArea();
+    private final RichTextEditor richEditor;
     private final Label imgPathLabel = new Label("Sin imagen seleccionada");
     private final ImageView imgPreview = new ImageView();
     private final Button btnPickImg = new Button("Seleccionar imagen");
@@ -58,6 +57,8 @@ public class PreliminariesPane extends HBox {
         this.book = book;
         this.stage = stage;
         this.pages.setAll(book.getPreliminaryPages());
+        // Editor de texto enriquecido sin botones especiales (solo formato)
+        this.richEditor = new RichTextEditor(stage, null, null);
         buildUI();
     }
 
@@ -78,9 +79,11 @@ public class PreliminariesPane extends HBox {
             listView.refresh();
         });
 
-        textArea.textProperty().addListener((o, old, val) -> {
-            if (loading || current == null) return;
-            current.setText(val);
+        // Escuchar cambios en el contenido HTML del editor
+        richEditor.focusedProperty().addListener((o, old, val) -> {
+            if (!val && current != null) {
+                current.setText(richEditor.getHtmlContent());
+            }
         });
 
         typeBox.valueProperty().addListener((o, old, val) -> {
@@ -148,11 +151,7 @@ public class PreliminariesPane extends HBox {
 
         Label textLabel = new Label("TEXTO");
         textLabel.getStyleClass().add("field-label");
-        textArea.getStyleClass().add("custom-text-area");
-        textArea.setWrapText(true);
-        textArea.setPrefRowCount(12);
-        VBox.setVgrow(textArea, Priority.ALWAYS);
-        textSection.getChildren().addAll(textLabel, textArea);
+        textSection.getChildren().addAll(textLabel, richEditor);
 
         Label imgLabel = new Label("IMAGEN");
         imgLabel.getStyleClass().add("field-label");
@@ -239,12 +238,12 @@ public class PreliminariesPane extends HBox {
 
         titleField.setDisable(false);
         typeBox.setDisable(false);
-        textArea.setDisable(false);
+        richEditor.setEditorEnabled(true);
         btnPickImg.setDisable(false);
 
         titleField.setText(page.getTitle());
         typeBox.setValue(mapTypeToString(page.getType()));
-        textArea.setText(page.getText());
+        richEditor.setHtmlContent(page.getText());
         updateEditorTitle(page.getTitle());
 
         updateImagePreview(page.getImagePath());
@@ -264,8 +263,8 @@ public class PreliminariesPane extends HBox {
         typeBox.setValue("Solo imagen");
         typeBox.setDisable(true);
 
-        textArea.clear();
-        textArea.setDisable(true);
+        richEditor.setEditorEnabled(false);
+        richEditor.setHtmlContent("");
 
         imgPreview.setVisible(false);
         imgPathLabel.setText("Sin imagen seleccionada");

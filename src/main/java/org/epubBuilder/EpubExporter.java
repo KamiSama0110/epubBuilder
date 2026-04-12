@@ -20,6 +20,10 @@ import org.epubBuilder.model.PreliminaryPage;
 public class EpubExporter {
 
     private static final Pattern GLOSS_PATTERN = Pattern.compile("\\[\\[GLOSS:([^|\\]]+)\\|([^|\\]]*)\\|([^\\]]+)]]");
+    // Marcador de imagen del RichTextEditor (captura div completo incluyendo cierre)
+    private static final Pattern IMAGE_MARKER = Pattern.compile("<div[^>]*class=['\"]epub-image-marker['\"][^>]*data-path=['\"]([^'\"]+)['\"][^>]*>.*?</div>", Pattern.DOTALL);
+    // Tambien soportar formato antiguo [IMAGEN:path]
+    private static final Pattern OLD_IMAGE_MARKER = Pattern.compile("\\[IMAGEN:([^\\]]+)]");
 
     private static class GlossaryRef {
         private final String chapterFile;
@@ -146,13 +150,9 @@ public class EpubExporter {
                 }
             }
 
-            // Texto
+            // Texto enriquecido
             if (page.getType() != PreliminaryPage.Type.IMAGEN && !page.getText().isBlank()) {
-                for (String line : page.getText().split("\n")) {
-                    String trimmed = line.trim();
-                    if (!trimmed.isEmpty())
-                        html.append("<p>").append(escapeHtml(trimmed)).append("</p>\n");
-                }
+                html.append(page.getText());
             }
 
             html.append("</body>\n</html>");
@@ -182,34 +182,14 @@ public class EpubExporter {
             html.append("</head>\n<body>\n");
             html.append("<h1>").append(escapeHtml(chapter.getTitle())).append("</h1>\n");
 
-            // Párrafos e imágenes inline entrelazados
+            // Procesar contenido HTML
             String body = chapter.getBody();
             if (body != null && !body.isBlank()) {
-                int imgCounter = 0;
-                for (String line : body.split("\n")) {
-                    String trimmed = line.trim();
-                    if (trimmed.isEmpty()) continue;
-
-                    if (trimmed.startsWith("[IMAGEN:") && trimmed.endsWith("]")) {
-                        // Extraer path de la marca
-                        String imgPath = trimmed.substring(8, trimmed.length() - 1);
-                        File   imgFile = new File(imgPath);
-                        if (!imgFile.exists()) continue;
-
-                        byte[] imgBytes = Files.readAllBytes(imgFile.toPath());
-                        String imgHref  = "images/" + chapterId + "_" + imgCounter + "_"
-                                + imgFile.getName();
-                        imgCounter++;
-                        epub.addResource(new Resource(imgBytes, imgHref));
-                        html.append("<img src=\"").append(imgHref)
-                                .append("\" alt=\"").append(escapeHtml(imgFile.getName()))
-                                .append("\"/>\n");
-                    } else {
-                        html.append("<p>")
-                                .append(processGlossaryMarkup(trimmed, chapterFile, glossaryDefinitions, glossaryReferences))
-                                .append("</p>\n");
-                    }
-                }
+                // Extraer y procesar imágenes del HTML
+                body = extractAndAddImages(body, chapterId, epub);
+                
+                // Procesar referencias de glosario en el HTML
+                html.append(processGlossaryMarkup(body, chapterFile, glossaryDefinitions, glossaryReferences));
             }
 
             html.append("</body>\n</html>");
@@ -232,6 +212,66 @@ public class EpubExporter {
         }
     }
 
+    private String extractAndAddImages(String html, String chapterId, nl.siegmann.epublib.domain.Book epub) {
+        int imgCounter = 0;
+        
+        // Procesar marcadores de imagen del RichTextEditor
+        Matcher markerMatcher = IMAGE_MARKER.matcher(html);
+        StringBuffer sb = new StringBuffer();
+        
+        while (markerMatcher.find()) {
+            String imgPath = markerMatcher.group(1);
+            File imgFile = new File(imgPath);
+            
+            if (imgFile.exists()) {
+                try {
+                    byte[] imgBytes = Files.readAllBytes(imgFile.toPath());
+                    String imgHref = "images/" + chapterId + "_" + imgCounter + "_" + imgFile.getName();
+                    imgCounter++;
+                    epub.addResource(new Resource(imgBytes, imgHref));
+                    
+                    // Reemplazar marcador con tag img real
+                    String imgTag = "<img src=\"" + imgHref + "\" alt=\"" + escapeHtml(imgFile.getName()) + "\"/>";
+                    markerMatcher.appendReplacement(sb, Matcher.quoteReplacement(imgTag));
+                } catch (Exception e) {
+                    // Si falla, dejar el marcador original
+                    markerMatcher.appendReplacement(sb, Matcher.quoteReplacement(markerMatcher.group(0)));
+                }
+            } else {
+                // Si no existe, dejar el marcador original
+                markerMatcher.appendReplacement(sb, Matcher.quoteReplacement(markerMatcher.group(0)));
+            }
+        }
+        markerMatcher.appendTail(sb);
+        html = sb.toString();
+        
+        // Tambien soportar formato antiguo [IMAGEN:path]
+        Matcher oldMarkerMatcher = OLD_IMAGE_MARKER.matcher(html);
+        StringBuffer sb2 = new StringBuffer();
+        while (oldMarkerMatcher.find()) {
+            String imgPath = oldMarkerMatcher.group(1);
+            File imgFile = new File(imgPath);
+            
+            if (imgFile.exists()) {
+                try {
+                    byte[] imgBytes = Files.readAllBytes(imgFile.toPath());
+                    String imgHref = "images/" + chapterId + "_" + imgCounter + "_" + imgFile.getName();
+                    imgCounter++;
+                    epub.addResource(new Resource(imgBytes, imgHref));
+                    
+                    String imgTag = "<img src=\"" + imgHref + "\" alt=\"" + escapeHtml(imgFile.getName()) + "\"/>";
+                    oldMarkerMatcher.appendReplacement(sb2, Matcher.quoteReplacement(imgTag));
+                } catch (Exception e) {
+                    oldMarkerMatcher.appendReplacement(sb2, Matcher.quoteReplacement(oldMarkerMatcher.group(0)));
+                }
+            } else {
+                oldMarkerMatcher.appendReplacement(sb2, Matcher.quoteReplacement(oldMarkerMatcher.group(0)));
+            }
+        }
+        oldMarkerMatcher.appendTail(sb2);
+        return sb2.toString();
+    }
+
     private String processGlossaryMarkup(
             String text,
             String chapterFile,
@@ -239,11 +279,12 @@ public class EpubExporter {
             Map<String, List<GlossaryRef>> glossaryReferences
     ) {
         Matcher matcher = GLOSS_PATTERN.matcher(text);
-        StringBuilder out = new StringBuilder();
+        StringBuffer out = new StringBuffer();
         int cursor = 0;
 
         while (matcher.find()) {
-            out.append(escapeHtml(text.substring(cursor, matcher.start())));
+            // Agregar texto antes del match sin escapar (ya es HTML)
+            out.append(text.substring(cursor, matcher.start()));
 
             String term = matcher.group(1).trim();
             String definition = matcher.group(2).trim();
@@ -279,7 +320,7 @@ public class EpubExporter {
             cursor = matcher.end();
         }
 
-        out.append(escapeHtml(text.substring(cursor)));
+        out.append(text.substring(cursor));
         return out.toString();
     }
 

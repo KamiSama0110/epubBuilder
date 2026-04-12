@@ -10,7 +10,6 @@ import javafx.geometry.Pos;
 import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
 import javafx.scene.control.ButtonType;
-import javafx.scene.control.IndexRange;
 import javafx.scene.control.Label;
 import javafx.scene.control.ListCell;
 import javafx.scene.control.ListView;
@@ -44,9 +43,7 @@ public class ChaptersPane extends HBox {
 
     private final Label editorTitle = new Label();
     private final TextField titleField = new TextField();
-    private final TextArea bodyArea = new TextArea();
-    private final Button btnInsertImg = new Button("Insertar imagen en cursor");
-    private final Button btnInsertGlossary = new Button("Referencia glosario");
+    private final RichTextEditor richEditor;
     private final ObservableList<GlossaryToken> glossaryTokens = FXCollections.observableArrayList();
     private final ListView<GlossaryToken> glossaryList = new ListView<>(glossaryTokens);
     private final VBox editorPane = new VBox();
@@ -58,6 +55,7 @@ public class ChaptersPane extends HBox {
         this.book = book;
         this.stage = stage;
         this.chapters.setAll(book.getChapters());
+        this.richEditor = new RichTextEditor(stage, this::insertImageAtCursor, this::insertGlossaryReference);
         buildUI();
     }
 
@@ -78,10 +76,13 @@ public class ChaptersPane extends HBox {
             listView.refresh();
         });
 
-        bodyArea.textProperty().addListener((o, old, val) -> {
-            if (loading || currentChapter == null) return;
-            currentChapter.setBody(val);
-            refreshGlossaryList();
+        // Escuchar cambios en el contenido HTML del editor
+        // Como HTMLEditor no tiene listener directo, usamos un listener en focus lost
+        richEditor.focusedProperty().addListener((o, old, val) -> {
+            if (!val && currentChapter != null) {
+                currentChapter.setBody(richEditor.getHtmlContent());
+                refreshGlossaryList();
+            }
         });
 
         clearEditor();
@@ -138,19 +139,6 @@ public class ChaptersPane extends HBox {
         Label bodyLabel = new Label("CONTENIDO");
         bodyLabel.getStyleClass().add("field-label");
 
-        bodyArea.getStyleClass().add("custom-text-area");
-        bodyArea.setWrapText(true);
-        bodyArea.setPrefRowCount(16);
-        VBox.setVgrow(bodyArea, Priority.ALWAYS);
-
-        btnInsertImg.getStyleClass().add("action-button");
-        btnInsertImg.setOnAction(e -> insertImageAtCursor());
-        btnInsertGlossary.getStyleClass().add("action-button");
-        btnInsertGlossary.setOnAction(e -> insertGlossaryReference());
-
-        HBox actionRow = new HBox(10, btnInsertImg, btnInsertGlossary);
-        actionRow.setAlignment(Pos.CENTER_LEFT);
-
         Label glossaryLabel = new Label("REFERENCIAS DE GLOSARIO");
         glossaryLabel.getStyleClass().add("field-label");
 
@@ -169,8 +157,7 @@ public class ChaptersPane extends HBox {
         });
         glossaryList.getSelectionModel().selectedItemProperty().addListener((o, old, val) -> {
             if (val == null) return;
-            bodyArea.requestFocus();
-            bodyArea.selectRange(val.start, val.end);
+            richEditor.requestEditorFocus();
         });
 
         Button btnEditRef = new Button("Editar");
@@ -189,8 +176,7 @@ public class ChaptersPane extends HBox {
                 titleLabel,
                 titleField,
                 bodyLabel,
-                bodyArea,
-                actionRow,
+                richEditor,
                 glossaryLabel,
                 glossaryList,
                 glossaryActions
@@ -255,12 +241,10 @@ public class ChaptersPane extends HBox {
         }
 
         titleField.setDisable(false);
-        bodyArea.setDisable(false);
-        btnInsertImg.setDisable(false);
-        btnInsertGlossary.setDisable(false);
+        richEditor.setEditorEnabled(true);
 
         titleField.setText(chapter.getTitle());
-        bodyArea.setText(chapter.getBody());
+        richEditor.setHtmlContent(chapter.getBody());
         updateEditorTitle(chapter.getTitle());
         refreshGlossaryList();
 
@@ -273,10 +257,8 @@ public class ChaptersPane extends HBox {
         updateEditorTitle("");
         titleField.clear();
         titleField.setDisable(true);
-        bodyArea.clear();
-        bodyArea.setDisable(true);
-        btnInsertImg.setDisable(true);
-        btnInsertGlossary.setDisable(true);
+        richEditor.setEditorEnabled(false);
+        richEditor.setHtmlContent("");
         glossaryTokens.clear();
     }
 
@@ -331,17 +313,17 @@ public class ChaptersPane extends HBox {
         File file = chooser.showOpenDialog(stage);
         if (file == null) return;
 
-        String mark = "\n[IMAGEN:" + file.getAbsolutePath() + "]\n";
-        int caret = bodyArea.getCaretPosition();
-        bodyArea.insertText(caret, mark);
-        bodyArea.positionCaret(caret + mark.length());
+        richEditor.insertImageMarker(file.getAbsolutePath());
+        // Guardar inmediatamente
+        currentChapter.setBody(richEditor.getHtmlContent());
     }
 
     private void insertGlossaryReference() {
         if (currentChapter == null) return;
 
-        String selectedText = bodyArea.getSelectedText() == null ? "" : bodyArea.getSelectedText().trim();
-        String initialTerm = selectedText.isBlank() ? "" : selectedText;
+        // Obtener texto seleccionado del editor via JavaScript
+        String selectedText = getSelectedTextFromEditor();
+        String initialTerm = selectedText.isBlank() ? "" : selectedText.trim();
 
         TextInputDialog termDialog = new TextInputDialog(initialTerm);
         termDialog.setTitle("Nueva referencia");
@@ -350,31 +332,80 @@ public class ChaptersPane extends HBox {
         String term = termDialog.showAndWait().orElse("").trim();
         if (term.isBlank()) return;
 
-        TextInputDialog defDialog = new TextInputDialog("");
-        defDialog.setTitle("Nueva referencia");
-        defDialog.setHeaderText("Definicion para el glosario");
-        defDialog.setContentText("Definicion:");
-        String definition = defDialog.showAndWait().orElse("").trim();
-        if (definition.isBlank()) return;
+        String definition = showLargeDefinitionDialog("");
+        if (definition == null || definition.isBlank()) return;
 
-        String visibleText = selectedText.isBlank() ? term : selectedText;
-        String token = "[[GLOSS:"
-                + sanitizeGlossaryPart(term)
-                + "|"
-                + sanitizeGlossaryPart(definition)
-                + "|"
-                + sanitizeGlossaryPart(visibleText)
-                + "]]";
-
-        IndexRange selection = bodyArea.getSelection();
-        if (selection.getLength() > 0) {
-            bodyArea.replaceText(selection, token);
+        // Si hay texto seleccionado, reemplazarlo con el token; si no, insertar en cursor
+        if (!selectedText.isBlank() && !initialTerm.isBlank()) {
+            replaceSelectedTextWithGlossaryToken(term, definition, initialTerm);
         } else {
-            int caret = bodyArea.getCaretPosition();
-            bodyArea.insertText(caret, token);
-            bodyArea.positionCaret(caret + token.length());
+            richEditor.insertGlossaryMarker(term, definition, term);
         }
+        currentChapter.setBody(richEditor.getHtmlContent());
         refreshGlossaryList();
+    }
+
+    private String getSelectedTextFromEditor() {
+        try {
+            Object result = richEditor.getWebViewEngine().executeScript(
+                    "window.getSelection().toString();"
+            );
+            return result == null ? "" : result.toString().trim();
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
+    private void replaceSelectedTextWithGlossaryToken(String term, String definition, String label) {
+        try {
+            String token = "[[GLOSS:"
+                    + sanitizeGlossaryPart(term) + "|"
+                    + sanitizeGlossaryPart(definition) + "|"
+                    + sanitizeGlossaryPart(label) + "]]";
+            String safeToken = token.replace("'", "\\'");
+            richEditor.getWebViewEngine().executeScript(
+                    "document.execCommand('insertHTML', false, '" + safeToken + "');"
+            );
+        } catch (Exception e) {
+            // Fallback: insertar normalmente
+            richEditor.insertGlossaryMarker(term, definition, label);
+        }
+    }
+
+    private String showLargeDefinitionDialog(String initialText) {
+        javafx.scene.control.Dialog<String> dialog = new javafx.scene.control.Dialog<>();
+        dialog.setTitle("Definicion del termino");
+        dialog.setHeaderText("Escribe la definicion o nota para el glosario");
+
+        ButtonType saveButtonType = new ButtonType("Guardar", javafx.scene.control.ButtonBar.ButtonData.OK_DONE);
+        dialog.getDialogPane().getButtonTypes().addAll(saveButtonType, ButtonType.CANCEL);
+
+        TextArea textArea = new TextArea(initialText);
+        textArea.setWrapText(true);
+        textArea.setPrefRowCount(8);
+        textArea.setPrefColumnCount(50);
+        textArea.getStyleClass().add("custom-text-area");
+
+        dialog.getDialogPane().setContent(textArea);
+
+        javafx.scene.Node saveButton = dialog.getDialogPane().lookupButton(saveButtonType);
+        saveButton.setDisable(true);
+
+        textArea.textProperty().addListener((o, old, val) ->
+                saveButton.setDisable(val == null || val.trim().isBlank())
+        );
+
+        dialog.setResultConverter(dialogButton -> {
+            if (dialogButton == saveButtonType) {
+                return textArea.getText().trim();
+            }
+            return null;
+        });
+
+        dialog.showAndWait().ifPresent(result -> {
+        });
+
+        return textArea.getText().trim();
     }
 
     private String sanitizeGlossaryPart(String input) {
@@ -392,12 +423,8 @@ public class ChaptersPane extends HBox {
         String term = termDialog.showAndWait().orElse("").trim();
         if (term.isBlank()) return;
 
-        TextInputDialog defDialog = new TextInputDialog(selected.definition);
-        defDialog.setTitle("Editar referencia");
-        defDialog.setHeaderText("Definicion");
-        defDialog.setContentText("Definicion:");
-        String definition = defDialog.showAndWait().orElse("").trim();
-        if (definition.isBlank()) return;
+        String definition = showLargeDefinitionDialog(selected.definition);
+        if (definition == null || definition.isBlank()) return;
 
         TextInputDialog labelDialog = new TextInputDialog(selected.label);
         labelDialog.setTitle("Editar referencia");
@@ -406,34 +433,75 @@ public class ChaptersPane extends HBox {
         String label = labelDialog.showAndWait().orElse("").trim();
         if (label.isBlank()) return;
 
-        String replacement = "[[GLOSS:"
-                + sanitizeGlossaryPart(term)
-                + "|"
-                + sanitizeGlossaryPart(definition)
-                + "|"
-                + sanitizeGlossaryPart(label)
-                + "]]";
-        bodyArea.replaceText(selected.start, selected.end, replacement);
+        try {
+            String token = "[[GLOSS:"
+                    + sanitizeGlossaryPart(term) + "|"
+                    + sanitizeGlossaryPart(definition) + "|"
+                    + sanitizeGlossaryPart(label) + "]]";
+            String safeToken = token.replace("'", "\\'");
+            // Seleccionar el token original por posicion y reemplazarlo
+            selectAndReplaceInEditor(selected.start, selected.end, safeToken);
+        } catch (Exception e) {
+            // Fallback
+            String replacement = "[[GLOSS:"
+                    + sanitizeGlossaryPart(term) + "|"
+                    + sanitizeGlossaryPart(definition) + "|"
+                    + sanitizeGlossaryPart(label) + "]]";
+            String content = richEditor.getHtmlContent();
+            String newContent = content.substring(0, selected.start) + replacement + content.substring(selected.end);
+            richEditor.setHtmlContent(newContent);
+        }
+        currentChapter.setBody(richEditor.getHtmlContent());
         refreshGlossaryList();
+    }
+
+    private void selectAndReplaceInEditor(int start, int end, String replacement) {
+        String js = """
+                (function() {
+                    var body = document.body;
+                    var text = body.innerHTML;
+                    var before = text.substring(0, %d);
+                    var after = text.substring(%d);
+                    body.innerHTML = before + '%s' + after;
+                })();
+                """.formatted(start, end, replacement);
+        richEditor.getWebViewEngine().executeScript(js);
     }
 
     private void removeSelectedGlossaryReference() {
         GlossaryToken selected = glossaryList.getSelectionModel().getSelectedItem();
         if (selected == null) return;
-        bodyArea.replaceText(selected.start, selected.end, selected.label);
+
+        try {
+            String safeLabel = selected.label.replace("'", "\\'");
+            String js = """
+                    (function() {
+                        var body = document.body;
+                        var text = body.innerHTML;
+                        var before = text.substring(0, %d);
+                        var after = text.substring(%d);
+                        body.innerHTML = before + '%s' + after;
+                    })();
+                    """.formatted(selected.start, selected.end, safeLabel);
+            richEditor.getWebViewEngine().executeScript(js);
+        } catch (Exception e) {
+            String content = richEditor.getHtmlContent();
+            String newContent = content.substring(0, selected.start) + selected.label + content.substring(selected.end);
+            richEditor.setHtmlContent(newContent);
+        }
+        currentChapter.setBody(richEditor.getHtmlContent());
         refreshGlossaryList();
     }
 
     private void refreshGlossaryList() {
-        String text = bodyArea.getText();
-        glossaryTokens.setAll(parseGlossaryTokens(text));
+        glossaryTokens.setAll(parseGlossaryTokens(richEditor.getHtmlContent()));
     }
 
-    private List<GlossaryToken> parseGlossaryTokens(String text) {
+    private List<GlossaryToken> parseGlossaryTokens(String html) {
         List<GlossaryToken> tokens = new ArrayList<>();
-        if (text == null || text.isBlank()) return tokens;
+        if (html == null || html.isBlank()) return tokens;
 
-        Matcher matcher = GLOSS_PATTERN.matcher(text);
+        Matcher matcher = GLOSS_PATTERN.matcher(html);
         while (matcher.find()) {
             String term = matcher.group(1).trim();
             String definition = matcher.group(2).trim();

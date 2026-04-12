@@ -11,8 +11,14 @@ Editor visual de libros EPUB para escritorio, pensado para escribir y exportar r
 
 - Crear libros por pestañas: Metadatos, Preliminares, Capítulos, Glosario y Exportar.
 - Administrar portada, idioma, autor y sinopsis.
-- Escribir capítulos con imágenes inline.
-- Marcar términos con referencias de glosario.
+- **Editor de texto enriquecido (WYSIWYG)** en capítulos y preliminares:
+  - Formato: **negrita**, *cursiva*, <u>subrayado</u>, ~~tachado~~.
+  - Alineación: izquierda, centro, derecha, justificado.
+  - Encabezados: título, H1, H2, H3.
+  - Listas: con viñetas y numeradas.
+  - Insertar imágenes directamente en el editor (se muestran como marcadores visuales).
+  - Insertar referencias de glosario seleccionando texto directamente.
+- Marcar términos con referencias de glosario (selecciona una palabra y agrega definición sin perder el formato).
 - Editar glosario de forma global desde un panel dedicado.
 - Exportar EPUB con validación previa de errores y advertencias.
 - Navegación bidireccional en glosario dentro del EPUB:
@@ -104,6 +110,12 @@ src/main/java/org/epubBuilder/
   io/ProjectStorage.java
   model/
   ui/
+    RichTextEditor.java      # Editor WYSIWYG reutilizable
+    ChaptersPane.java
+    PreliminariesPane.java
+    GlossaryPane.java
+    MetadataPane.java
+    ExportPane.java
 src/main/resources/
   css/styles.css
   icon.png

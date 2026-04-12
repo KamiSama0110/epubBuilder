@@ -284,3 +284,110 @@
     -fx-font-weight: 600;
     -fx-text-fill: #6f8196;
 }
+
+/* RichTextEditor Toolbar */
+.rich-editor-container {
+    -fx-spacing: 0;
+    -fx-background-color: #ffffff;
+}
+
+.editor-toolbar {
+    -fx-background-color: #f8fafc;
+    -fx-border-color: #d1dae5;
+    -fx-border-width: 0 0 1 0;
+    -fx-padding: 6 8;
+    -fx-spacing: 4;
+    -fx-alignment: center-left;
+}
+
+.toolbar-format-button {
+    -fx-background-color: #ffffff;
+    -fx-text-fill: #2c3e50;
+    -fx-font-size: 13px;
+    -fx-font-weight: 700;
+    -fx-border-color: #c8d4df;
+    -fx-border-width: 1;
+    -fx-border-radius: 6;
+    -fx-background-radius: 6;
+    -fx-padding: 6 10;
+    -fx-cursor: hand;
+    -fx-min-width: 42;
+}
+
+.toolbar-format-button:hover {
+    -fx-background-color: #edf3f8;
+    -fx-border-color: #a0b4c8;
+}
+
+.bold-button {
+    -fx-font-weight: 900;
+}
+
+.italic-button {
+    -fx-font-style: italic;
+}
+
+.underline-button {
+    -fx-underline: true;
+}
+
+.strike-button {
+    -fx-strikethrough: true;
+}
+
+.toolbar-combo-box {
+    -fx-background-color: #ffffff;
+    -fx-font-size: 12px;
+    -fx-border-color: #c8d4df;
+    -fx-border-radius: 6;
+    -fx-background-radius: 6;
+}
+
+.toolbar-combo-box:focused {
+    -fx-border-color: #2f7df6;
+}
+
+.toolbar-action-button {
+    -fx-background-color: #e8f1fb;
+    -fx-text-fill: #1f497a;
+    -fx-font-size: 12px;
+    -fx-font-weight: 700;
+    -fx-border-color: #b8d0ea;
+    -fx-border-width: 1;
+    -fx-border-radius: 6;
+    -fx-background-radius: 6;
+    -fx-padding: 6 10;
+    -fx-cursor: hand;
+}
+
+.toolbar-action-button:hover {
+    -fx-background-color: #d4e5f7;
+}
+
+.toolbar-danger-button {
+    -fx-background-color: #fef2f2;
+    -fx-text-fill: #b91c1c;
+    -fx-font-size: 12px;
+    -fx-font-weight: 700;
+    -fx-border-color: #fca5a5;
+    -fx-border-width: 1;
+    -fx-border-radius: 6;
+    -fx-background-radius: 6;
+    -fx-padding: 6 10;
+    -fx-cursor: hand;
+}
+
+.toolbar-danger-button:hover {
+    -fx-background-color: #fee2e2;
+}
+
+.custom-html-editor {
+    -fx-border-color: #d1dae5;
+    -fx-border-width: 1;
+    -fx-border-radius: 0 0 8 8;
+    -fx-background-color: #ffffff;
+}
+
+.custom-html-editor .web-view {
+    -fx-background-color: #ffffff;
+}
